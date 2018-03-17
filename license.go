@@ -10,20 +10,21 @@ import (
 
 const (
 	// Recognized license types
-	LicenseMIT       = "MIT"
-	LicenseISC       = "ISC"
-	LicenseNewBSD    = "NewBSD"
-	LicenseFreeBSD   = "FreeBSD"
-	LicenseApache20  = "Apache-2.0"
-	LicenseMPL20     = "MPL-2.0"
-	LicenseGPL20     = "GPL-2.0"
-	LicenseGPL30     = "GPL-3.0"
-	LicenseLGPL21    = "LGPL-2.1"
-	LicenseLGPL30    = "LGPL-3.0"
-	LicenseAGPL30    = "AGPL-3.0"
-	LicenseCDDL10    = "CDDL-1.0"
-	LicenseEPL10     = "EPL-1.0"
-	LicenseUnlicense = "Unlicense"
+	LicenseMIT        = "MIT"
+	LicenseISC        = "ISC"
+	LicenseBSD3Clause = "BSD-3-Clause"
+	LicenseBSD2Clause = "BSD-2-Clause"
+	LicenseApache20   = "Apache-2.0"
+	LicenseMPL20      = "MPL-2.0"
+	LicenseGPL20      = "GPL-2.0"
+	LicenseGPL30      = "GPL-3.0"
+	LicenseLGPL21     = "LGPL-2.1"
+	LicenseLGPL30     = "LGPL-3.0"
+	LicenseAGPL30     = "AGPL-3.0"
+	LicenseCDDL10     = "CDDL-1.0"
+	LicenseEPL10      = "EPL-1.0"
+	LicenseZlib       = "zlib"
+	LicenseUnlicense  = "Unlicense"
 )
 
 var (
@@ -36,18 +37,15 @@ var (
 // A set of reasonable license file names to use when guessing where the
 // license may be. Case does not matter.
 var DefaultLicenseFiles = []string{
-	"license", "license.txt", "license.md",
-	"licence", "licence.txt", "licence.md",
-	"copying", "copying.txt", "copying.md",
-	"unlicense",
+	"license*", "licence*", "copying*", "unlicense",
 }
 
 // A slice of standardized license abbreviations
 var KnownLicenses = []string{
 	LicenseMIT,
 	LicenseISC,
-	LicenseNewBSD,
-	LicenseFreeBSD,
+	LicenseBSD3Clause,
+	LicenseBSD2Clause,
 	LicenseApache20,
 	LicenseMPL20,
 	LicenseGPL20,
@@ -57,6 +55,7 @@ var KnownLicenses = []string{
 	LicenseAGPL30,
 	LicenseCDDL10,
 	LicenseEPL10,
+	LicenseZlib,
 	LicenseUnlicense,
 }
 
@@ -121,11 +120,16 @@ func (l *License) Recognized() bool {
 // GuessFile searches a given directory (non-recursively) for files with well-
 // established names that indicate license content.
 func (l *License) GuessFile(dir string) error {
+
 	files, err := readDirectory(dir)
 	if err != nil {
 		return err
 	}
-	match, err := getLicenseFile(DefaultLicenseFiles, files)
+	patterns, err := complileLicensePatters(DefaultLicenseFiles)
+	if err != nil {
+		return err
+	}
+	match, err := getLicenseFile(patterns, files)
 	if err != nil {
 		return err
 	}
@@ -196,9 +200,9 @@ func (l *License) GuessType() error {
 	case scan(comp, "redistribution and use in source and binary forms"):
 		switch {
 		case scan(comp, "neither the name of"):
-			l.Type = LicenseNewBSD
+			l.Type = LicenseBSD3Clause
 		default:
-			l.Type = LicenseFreeBSD
+			l.Type = LicenseBSD2Clause
 		}
 
 	case scan(comp, "common development and distribution license (cddl) "+
@@ -207,6 +211,9 @@ func (l *License) GuessType() error {
 
 	case scan(comp, "eclipse public license - v 1.0"):
 		l.Type = LicenseEPL10
+
+	case scan(comp, "permission is granted to anyone to use this software for any purpose"):
+		l.Type = LicenseZlib
 
 	case scan(comp, "this is free and unencumbered software released into "+
 		"the public domain"):
@@ -242,11 +249,11 @@ func readDirectory(dir string) ([]string, error) {
 // returns files that case-insensitive matches any of the license
 // files.  This is generic functionality so pulled out into separate
 // function for testing
-func matchLicenseFile(licenses []string, files []string) []string {
+func matchLicenseFile(patterns []*regexp.Regexp, files []string) []string {
 	out := make([]string, 0, 1)
 	for _, file := range files {
-		for _, license := range licenses {
-			if strings.EqualFold(license, file) {
+		for _, pattern := range patterns {
+			if pattern.MatchString(file) {
 				out = append(out, file)
 			}
 		}
@@ -255,8 +262,8 @@ func matchLicenseFile(licenses []string, files []string) []string {
 }
 
 // returns a single license filename or error
-func getLicenseFile(licenses []string, files []string) (string, error) {
-	matches := matchLicenseFile(licenses, files)
+func getLicenseFile(patterns []*regexp.Regexp, files []string) (string, error) {
+	matches := matchLicenseFile(patterns, files)
 
 	switch len(matches) {
 	case 0:
@@ -266,4 +273,12 @@ func getLicenseFile(licenses []string, files []string) (string, error) {
 	default:
 		return "", ErrMultipleLicenses
 	}
+}
+
+func complileLicensePatters(licenses []string) (patterns []*regexp.Regexp, err error) {
+	for _, license := range licenses {
+		pattern := regexp.MustCompile("(?i)^" + strings.Replace(license, "*", ".*", -1))
+		patterns = append(patterns, pattern)
+	}
+	return patterns, nil
 }
