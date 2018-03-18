@@ -98,13 +98,18 @@ func NewFromFile(path string) (*License, error) {
 // NewFromDir will search a directory for well-known and accepted license file
 // names, and if one is found, read in its content and guess the license type.
 func NewFromDir(dir string) (*License, error) {
-	l := new(License)
-
-	if err := l.GuessFile(dir); err != nil {
+	ls, err := guessFromDir(dir)
+	if err != nil {
 		return nil, err
 	}
 
-	return NewFromFile(l.File)
+	return ls[0], nil
+}
+
+// NewLicencesFromDir will search a directory for well-known and accepted license files
+// names, and if one is found, read in its content and guess the license type.
+func NewLicencesFromDir(dir string) ([]*License, error) {
+	return guessFromDir(dir)
 }
 
 // Recognized determines if the license is known to go-license.
@@ -115,26 +120,6 @@ func (l *License) Recognized() bool {
 		}
 	}
 	return false
-}
-
-// GuessFile searches a given directory (non-recursively) for files with well-
-// established names that indicate license content.
-func (l *License) GuessFile(dir string) error {
-
-	files, err := readDirectory(dir)
-	if err != nil {
-		return err
-	}
-	patterns, err := complileLicensePatters(DefaultLicenseFiles)
-	if err != nil {
-		return err
-	}
-	match, err := getLicenseFile(patterns, files)
-	if err != nil {
-		return err
-	}
-	l.File = filepath.Join(dir, match)
-	return nil
 }
 
 // GuessType will scan license text and attempt to guess what license type it
@@ -246,6 +231,37 @@ func readDirectory(dir string) ([]string, error) {
 	return files, nil
 }
 
+// guessFromDir searches a given directory (non-recursively) for files with well-
+// established names that indicate license content.
+func guessFromDir(dir string) (licenses []*License, err error) {
+
+	files, err := readDirectory(dir)
+	if err != nil {
+		return nil, err
+	}
+	patterns, err := complileLicensePatters(DefaultLicenseFiles)
+	if err != nil {
+		return nil, err
+	}
+	matchs, err := getLicenseFile(patterns, files)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, match := range matchs {
+		l, err := NewFromFile(filepath.Join(dir, match))
+		if err == nil && l.GuessType() == nil {
+			licenses = append(licenses, l)
+		}
+	}
+
+	if len(licenses) == 0 {
+		return nil, ErrUnrecognizedLicense
+	}
+
+	return licenses, nil
+}
+
 // returns files that case-insensitive matches any of the license
 // files.  This is generic functionality so pulled out into separate
 // function for testing
@@ -262,17 +278,12 @@ func matchLicenseFile(patterns []*regexp.Regexp, files []string) []string {
 }
 
 // returns a single license filename or error
-func getLicenseFile(patterns []*regexp.Regexp, files []string) (string, error) {
+func getLicenseFile(patterns []*regexp.Regexp, files []string) ([]string, error) {
 	matches := matchLicenseFile(patterns, files)
-
-	switch len(matches) {
-	case 0:
-		return "", ErrNoLicenseFile
-	case 1:
-		return matches[0], nil
-	default:
-		return "", ErrMultipleLicenses
+	if len(matches) == 0 {
+		return nil, ErrNoLicenseFile
 	}
+	return matches, nil
 }
 
 func complileLicensePatters(licenses []string) (patterns []*regexp.Regexp, err error) {
