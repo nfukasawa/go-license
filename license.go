@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	LicenseUnrecognized = "Unrecognized"
 	// Recognized license types
 	LicenseMIT        = "MIT"
 	LicenseISC        = "ISC"
@@ -103,7 +104,12 @@ func NewFromDir(dir string) (*License, error) {
 		return nil, err
 	}
 
-	return ls[0], nil
+	for _, l := range ls {
+		if l.Type != LicenseUnrecognized {
+			return l, nil
+		}
+	}
+	return nil, ErrUnrecognizedLicense
 }
 
 // NewLicencesFromDir will search a directory for well-known and accepted license files
@@ -249,7 +255,14 @@ func guessFromDir(dir string) (licenses []*License, err error) {
 	}
 
 	for _, match := range matchs {
-		l, err := NewFromFile(filepath.Join(dir, match))
+		file := filepath.Join(dir, match)
+		l, err := NewFromFile(file)
+		if err == ErrUnrecognizedLicense {
+			licenses = append(licenses, &License{
+				Type: LicenseUnrecognized,
+				File: file,
+			})
+		}
 		if err == nil && l.GuessType() == nil {
 			licenses = append(licenses, l)
 		}
