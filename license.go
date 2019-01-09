@@ -112,9 +112,9 @@ func NewFromDir(dir string) (*License, error) {
 	return nil, ErrUnrecognizedLicense
 }
 
-// NewLicencesFromDir will search a directory for well-known and accepted license files
+// NewLicensesFromDir will search a directory for well-known and accepted license files
 // names, and if one is found, read in its content and guess the license type.
-func NewLicencesFromDir(dir string) ([]*License, error) {
+func NewLicensesFromDir(dir string) ([]*License, error) {
 	return guessFromDir(dir)
 }
 
